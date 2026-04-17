@@ -1,0 +1,11 @@
+target
+.git
+.gitignore
+README.md
+doc
+.env
+.env.*target
+.git
+.github
+doc
+.env

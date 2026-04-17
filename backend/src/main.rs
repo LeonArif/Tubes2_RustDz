@@ -2,6 +2,7 @@ use axum::{Json, Router, http::StatusCode, response::IntoResponse, routing::get}
 use dotenvy::dotenv;
 use serde_json::json;
 use std::env;
+mod modules;
 
 #[derive(Debug)]
 enum ApiError {
@@ -52,6 +53,15 @@ fn read_port() -> u16 {
         .unwrap_or(3000)
 }
 
+// Fungsi untuk membaca host dari environment variable (default 0.0.0.0)
+fn read_host() -> String {
+    env::var("HOST")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "0.0.0.0".to_string())
+}
+
 fn create_app() -> Router {
     Router::new()
         .route("/", get(root))
@@ -65,7 +75,8 @@ async fn main() {
 
     let app = create_app();
     let port = read_port();
-    let bind_addr = format!("127.0.0.1:{}", port);
+    let host = read_host();
+    let bind_addr = format!("{}:{}", host, port);
 
     let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
