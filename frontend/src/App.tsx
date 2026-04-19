@@ -1,95 +1,97 @@
 import { useState } from "react";
+import { fetchTraversalData } from "./api";
 import type { TraversalResponse } from "./types";
-import "./App.css";
+import ControlPanel from "./components/ControlPanel";
+// import GraphViewer from './components/GraphViewer'; // (Ini nanti diisi oleh Role B)
 
-function App() {
-  // state input
-  const [htmlContent, setHtmlContent] = useState("");
-  const [cssSelector, setCssSelector] = useState("");
-  const [method, setMethod] = useState<"BFS" | "DFS">("BFS");
-
-  // state output server
+export default function App() {
+  // state hasil traversal
   const [result, setResult] = useState<TraversalResponse | null>(null);
 
-  // state UI
-  const [isLoading, setIsLoading] = useState(false);
+  // state untuk status proses (loading & error)
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleMockRun = () => {
+  // fungsi utama yang dipanggil saat tombol diklik
+  const handleStartTraversal = async (
+    html: string,
+    selector: string,
+    method: "BFS" | "DFS",
+  ) => {
+    // validasi input sebelum memulai proses
+    if (!html.trim()) {
+      setError("Silakan upload file HTML terlebih dahulu.");
+      return;
+    }
+    if (!selector.trim()) {
+      setError("CSS Selector tidak boleh kosong.");
+      return;
+    }
+
     setIsLoading(true);
-    setError(null);
+    setError(null); // reset error setiap mulai pencarian baru
+    setResult(null); // reset hasil lama
 
-    // Temporary local mock (no backend integration)
-    setResult({
-      execution_time_us: 0,
-      matched_nodes: [],
-      traversal_path: [],
-      tree_data: {
-        root: "html",
-      },
-    });
-
-    setIsLoading(false);
+    try {
+      // memanggil API
+      const data = await fetchTraversalData(html, selector, method);
+      setResult(data); // simpan hasil sukses ke stat!
+    } catch (err: unknown) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Terjadi kesalahan tidak diketahui",
+      ); // tampilkan pesan error
+    } finally {
+      setIsLoading(false); // matikan loading, apa pun hasilnya
+    }
   };
 
   return (
-    <>
-      <section id="center">
-        <header style={{ marginBottom: "1rem", textAlign: "center" }}>
-          <h1>Document Object Model Traversal Visualizer</h1>
-          <p>Analyze HTML nodes with BFS or DFS using CSS selectors</p>
-        </header>
+    <div className="flex h-screen w-full bg-gray-50 font-sans">
+      {/* sisi kiri: panel control */}
+      <div className="w-1/3 p-6 bg-white border-r border-gray-200 flex flex-col gap-4 shadow-sm z-10">
+        <h1 className="text-2xl font-bold text-gray-800">DOM Traversal TB2</h1>
 
-        <div style={{ marginTop: "1rem", width: "100%", maxWidth: "520px" }}>
-          <textarea
-            placeholder="Paste HTML content"
-            value={htmlContent}
-            onChange={(e) => setHtmlContent(e.target.value)}
-            rows={4}
-            style={{ width: "100%", marginBottom: "0.5rem" }}
-          />
-          <input
-            type="text"
-            placeholder="CSS selector (e.g. .item > p)"
-            value={cssSelector}
-            onChange={(e) => setCssSelector(e.target.value)}
-            style={{ width: "100%", marginBottom: "0.5rem" }}
-          />
-          <select
-            value={method}
-            onChange={(e) => setMethod(e.target.value as "BFS" | "DFS")}
-            style={{ width: "100%", marginBottom: "0.5rem" }}
-          >
-            <option value="BFS">BFS</option>
-            <option value="DFS">DFS</option>
-          </select>
+        {/* fungsi eksekusi oleh komponen control panel */}
+        <ControlPanel onTraverse={handleStartTraversal} isLoading={isLoading} />
 
-          <button
-            className="counter"
-            onClick={handleMockRun}
-            disabled={isLoading || !htmlContent.trim() || !cssSelector.trim()}
-          >
-            {isLoading ? "Running..." : `Run ${method}`}
-          </button>
+        {/* indikator UI */}
+        {error && (
+          <div className="p-3 bg-red-100 text-red-700 rounded-md border border-red-200">
+            {error}
+          </div>
+        )}
 
-          {error && (
-            <p style={{ color: "#c00", marginTop: "0.5rem" }}>{error}</p>
-          )}
-          {result && (
-            <p style={{ marginTop: "0.5rem" }}>
-              Done in {result.execution_time_us} us, matched{" "}
-              {result.matched_nodes.length} nodes.
+        {result && (
+          <div className="p-4 bg-green-50 text-green-800 rounded-md border border-green-200 mt-auto">
+            <h3 className="font-bold mb-2">Pencarian Berhasil!</h3>
+            <p>
+              Waktu Eksekusi: <b>{result.execution_time_us} µs</b>
             </p>
-          )}
-        </div>
-      </section>
+            <p>
+              Node Ditemukan: <b>{result.matched_nodes.length}</b>
+            </p>
+          </div>
+        )}
+      </div>
 
-      <div className="ticks"></div>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      {/* sisi kanan: graph viewer */}
+      <div className="w-2/3 bg-gray-100 relative flex items-center justify-center">
+        {isLoading ? (
+          <div className="text-xl animate-pulse text-gray-500">
+            Menganalisis Document Object Model
+          </div>
+        ) : result ? (
+          <div className="text-green-600 font-bold">
+            Data berhasil didapat! Siap dioper ke komponen GraphViewer
+          </div>
+        ) : (
+          <div className="text-gray-400">
+            Silakan masukkan parameter dan mulai pencarian
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
-
-export default App;
