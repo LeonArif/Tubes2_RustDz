@@ -22,14 +22,14 @@ type BackendErrorPayload = {
 
 // fungsi untuk mengirim data traversal
 export const fetchTraversalData = async (
-  html: string, 
+  sourceUrl: string,
   selector: string, 
   method: 'BFS' | 'DFS'
 ): Promise<TraversalResponse> => {
   try {
     // request endpoint POST /api/traverse
     const response = await apiClient.post<TraversalResponse>(TRAVERSAL_ENDPOINT, {
-      html_content: html,
+      source_url: sourceUrl,
       css_selector: selector,
       method: method,
     });
