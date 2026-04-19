@@ -2,11 +2,23 @@ import { useState } from "react";
 import { fetchTraversalData } from "./api";
 import type { TraversalResponse } from "./types";
 import ControlPanel from "./components/ControlPanel";
-// import GraphViewer from './components/GraphViewer'; // (Ini nanti diisi oleh Role B)
+import "./App.css";
+
+// tipe untuk menyimpan riwayat traversal yang berhasil
+type TraversalHistoryItem = {
+  id: string;
+  sourceUrl: string;
+  selector: string;
+  method: "BFS" | "DFS";
+  executionTimeUs: number;
+  matchedCount: number;
+  createdAt: string;
+};
 
 export default function App() {
   // state hasil traversal
   const [result, setResult] = useState<TraversalResponse | null>(null);
+  const [history, setHistory] = useState<TraversalHistoryItem[]>([]);
 
   // state untuk status proses (loading & error)
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -14,15 +26,23 @@ export default function App() {
 
   // fungsi utama yang dipanggil saat tombol diklik
   const handleStartTraversal = async (
-    html: string,
+    sourceUrl: string,
     selector: string,
     method: "BFS" | "DFS",
   ) => {
     // validasi input sebelum memulai proses
-    if (!html.trim()) {
-      setError("Silakan upload file HTML terlebih dahulu.");
+    if (!sourceUrl.trim()) {
+      setError("URL HTML tidak boleh kosong.");
       return;
     }
+
+    try {
+      new URL(sourceUrl);
+    } catch {
+      setError("Format URL tidak valid. Contoh: https://example.com");
+      return;
+    }
+
     if (!selector.trim()) {
       setError("CSS Selector tidak boleh kosong.");
       return;
@@ -34,8 +54,24 @@ export default function App() {
 
     try {
       // memanggil API
-      const data = await fetchTraversalData(html, selector, method);
+      const data = await fetchTraversalData(sourceUrl, selector, method);
       setResult(data); // simpan hasil sukses ke stat!
+      setHistory((prev) => {
+        const nextEntry: TraversalHistoryItem = {
+          id: crypto.randomUUID(),
+          sourceUrl,
+          selector,
+          method,
+          executionTimeUs: data.execution_time_us,
+          matchedCount: data.matched_nodes.length,
+          createdAt: new Date().toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+        };
+
+        return [nextEntry, ...prev].slice(0, 5);
+      });
     } catch (err: unknown) {
       setError(
         err instanceof Error
@@ -48,49 +84,93 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-gray-50 font-sans">
-      {/* sisi kiri: panel control */}
-      <div className="w-1/3 p-6 bg-white border-r border-gray-200 flex flex-col gap-4 shadow-sm z-10">
-        <h1 className="text-2xl font-bold text-gray-800">DOM Traversal TB2</h1>
-
-        {/* fungsi eksekusi oleh komponen control panel */}
-        <ControlPanel onTraverse={handleStartTraversal} isLoading={isLoading} />
-
-        {/* indikator UI */}
-        {error && (
-          <div className="p-3 bg-red-100 text-red-700 rounded-md border border-red-200">
-            {error}
-          </div>
-        )}
-
-        {result && (
-          <div className="p-4 bg-green-50 text-green-800 rounded-md border border-green-200 mt-auto">
-            <h3 className="font-bold mb-2">Pencarian Berhasil!</h3>
-            <p>
-              Waktu Eksekusi: <b>{result.execution_time_us} µs</b>
-            </p>
-            <p>
-              Node Ditemukan: <b>{result.matched_nodes.length}</b>
+    <div className="app-shell">
+      <div className="app-grid">
+        <aside className="panel panel-controls">
+          <div className="panel-title-wrap">
+            <h1 className="panel-title">
+              HTML Document Object Model Traversal Explorer
+            </h1>
+            <p className="panel-subtitle">
+              Masukkan URL halaman, selector CSS, lalu pilih algoritma BFS atau
+              DFS
             </p>
           </div>
-        )}
-      </div>
 
-      {/* sisi kanan: graph viewer */}
-      <div className="w-2/3 bg-gray-100 relative flex items-center justify-center">
-        {isLoading ? (
-          <div className="text-xl animate-pulse text-gray-500">
-            Menganalisis Document Object Model
+          <ControlPanel
+            onTraverse={handleStartTraversal}
+            isLoading={isLoading}
+          />
+
+          {error && <div className="alert alert-error">{error}</div>}
+
+          {result && (
+            <div className="alert alert-success push-bottom">
+              <h3 className="summary-title">Hasil Traversal</h3>
+              <p>
+                Waktu Eksekusi: <b>{result.execution_time_us} µs</b>
+              </p>
+              <p>
+                Node Ditemukan: <b>{result.matched_nodes.length}</b>
+              </p>
+            </div>
+          )}
+        </aside>
+
+        <main className="panel panel-results">
+          <div className="status-area">
+            {isLoading ? (
+              <div className="status status-loading">
+                <div className="status-heading">
+                  Menganalisis Document Object Model
+                </div>
+                <div className="status-subheading">Mohon ditunggu...</div>
+              </div>
+            ) : result ? (
+              <div className="status status-success">
+                <div className="status-heading">Data berhasil didapatkan</div>
+                <div className="status-subheading">
+                  (visualisasi tree)
+                </div>
+              </div>
+            ) : (
+              <div className="status status-idle">
+                <div className="status-heading">Belum ada hasil</div>
+                <div className="status-subheading">
+                  Masukkan parameter lalu klik Cari Elemen
+                </div>
+              </div>
+            )}
           </div>
-        ) : result ? (
-          <div className="text-green-600 font-bold">
-            Data berhasil didapat! Siap dioper ke komponen GraphViewer
-          </div>
-        ) : (
-          <div className="text-gray-400">
-            Silakan masukkan parameter dan mulai pencarian
-          </div>
-        )}
+
+          <section className="history-card">
+            <div className="history-head">
+              <h2 className="history-title">Riwayat Request</h2>
+              <span className="history-note">Maks. 5 terakhir</span>
+            </div>
+
+            {history.length === 0 ? (
+              <p className="history-empty">Belum ada request yang berhasil.</p>
+            ) : (
+              <ul className="history-list">
+                {history.map((item) => (
+                  <li key={item.id} className="history-item">
+                    <div className="history-item-top">
+                      <span className="history-url" title={item.sourceUrl}>
+                        {item.sourceUrl}
+                      </span>
+                      <span className="history-time">{item.createdAt}</span>
+                    </div>
+                    <div className="history-meta">
+                      Selector: {item.selector} | Metode: {item.method} | Match:{" "}
+                      {item.matchedCount} | {item.executionTimeUs} µs
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </main>
       </div>
     </div>
   );
