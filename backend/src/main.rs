@@ -8,6 +8,7 @@ use dotenvy::dotenv;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::env;
+use std::time::Duration;
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::modules::domnode::DomNode;
@@ -55,7 +56,8 @@ async fn health_check() -> impl IntoResponse {
 
 #[derive(Debug, Deserialize)]
 struct TraversalRequest {
-    html_content: String,
+    html_content: Option<String>,
+    source_url: Option<String>,
     css_selector: String,
     method: String,
 }
@@ -77,12 +79,8 @@ struct TraversalResponse {
 
 // fungsi parsing HTML menjadi Tree menggunakan pendekatan struktur data stack
 async fn traverse(Json(payload): Json<TraversalRequest>) -> Result<impl IntoResponse, ApiError> {
-    // validasi input untuk memastikan tidak ada field yang kosong atau hanya whitespace
-    if payload.html_content.trim().is_empty() {
-        return Err(ApiError::BadRequest(
-            "html_content cannot be empty".to_string(),
-        ));
-    }
+    // HTML bisa dikirim langsung atau diambil dari URL
+    let html_content = resolve_html_source(&payload).await?;
 
     if payload.css_selector.trim().is_empty() {
         return Err(ApiError::BadRequest(
@@ -91,18 +89,17 @@ async fn traverse(Json(payload): Json<TraversalRequest>) -> Result<impl IntoResp
     }
 
     // Parsing HTML ke dalam struktur Tree menggunakan parser custom yang toleran terhadap markup yang tidak sempurna. Pendekatan ini lebih stabil untuk berbagai input HTML, termasuk fragmen dan markup yang tidak valid, dibandingkan dengan parser berbasis regex sederhana.
-    let tree = modules::parser::parse_html_to_tree(&payload.html_content)
-        .map_err(ApiError::BadRequest)?;
+    let tree = modules::parser::parse_html_to_tree(&html_content).map_err(ApiError::BadRequest)?;
 
     // Parsing CSS selector menggunakan modul selector untuk menghasilkan struktur query yang dapat dieksekusi oleh algoritma traversal
-    // Validasi dilakukan untuk memastikan selector yang diberikan sesuai dengan subset CSS yang didukung, 
+    // Validasi dilakukan untuk memastikan selector yang diberikan sesuai dengan subset CSS yang didukung,
     // dan error handling memberikan feedback yang jelas jika terjadi kesalahan dalam parsing selector.
-    let selector_query = SelectorQuery::parse(payload.css_selector.trim())
-        .map_err(ApiError::BadRequest)?;
+    let selector_query =
+        SelectorQuery::parse(payload.css_selector.trim()).map_err(ApiError::BadRequest)?;
 
     let method = payload.method.trim().to_ascii_uppercase();
-    // algoritma traversal dipilih berdasarkan input method, 
-    // eksekusi traversal menghasilkan urutan node yang dikunjungi serta metrik waktu eksekusi, 
+    // algoritma traversal dipilih berdasarkan input method,
+    // eksekusi traversal menghasilkan urutan node yang dikunjungi serta metrik waktu eksekusi,
     // yang kemudian digunakan untuk membangun response yang dikirim kembali ke frontend
     let (traversal_order, elapsed_ms) = match method.as_str() {
         "BFS" => {
@@ -151,6 +148,63 @@ async fn traverse(Json(payload): Json<TraversalRequest>) -> Result<impl IntoResp
     Ok(Json(response))
 }
 
+// fungsi untuk mengambil konten HTML dari URL atau langsung dari input, 
+// dengan validasi dan error handling untuk memastikan konten yang diproses valid dan dapat digunakan untuk parsing selanjutnya
+// Pendekatan ini memberikan fleksibilitas bagi user untuk memilih sumber HTML baik itu melalui URL maupun input langsung teks HTML-nya
+async fn resolve_html_source(payload: &TraversalRequest) -> Result<String, ApiError> {
+    if let Some(source_url) = payload.source_url.as_deref() {
+        let source_url = source_url.trim();
+        if source_url.is_empty() {
+            return Err(ApiError::BadRequest(
+                "source_url cannot be empty".to_string(),
+            ));
+        }
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .map_err(|_| {
+                ApiError::BadRequest("Failed to initialize URL fetch client".to_string())
+            })?;
+
+        let response = client
+            .get(source_url)
+            .send()
+            .await
+            .map_err(|_| ApiError::BadRequest("Gagal mengambil konten dari URL".to_string()))?;
+
+        if !response.status().is_success() {
+            return Err(ApiError::BadRequest(format!(
+                "URL merespons dengan status {}",
+                response.status()
+            )));
+        }
+
+        let body = response
+            .text()
+            .await
+            .map_err(|_| ApiError::BadRequest("Gagal membaca konten dari URL".to_string()))?;
+
+        if body.trim().is_empty() {
+            return Err(ApiError::BadRequest(
+                "Konten HTML dari URL kosong".to_string(),
+            ));
+        }
+
+        return Ok(body);
+    }
+
+    if let Some(html_content) = payload.html_content.as_deref() {
+        if !html_content.trim().is_empty() {
+            return Ok(html_content.to_string());
+        }
+    }
+
+    Err(ApiError::BadRequest(
+        "source_url or html_content is required".to_string(),
+    ))
+}
+
 // fungsi pencocokan node
 fn to_matched_node(id: usize, node: &DomNode) -> TraversalMatchedNode {
     let class_value = node
@@ -169,7 +223,7 @@ fn to_matched_node(id: usize, node: &DomNode) -> TraversalMatchedNode {
 
 // fungsi membangun data tree
 fn build_tree_data(tree: &Tree) -> serde_json::Value {
-    // serialize tree ke dalam format JSON untuk diterima frontend, 
+    // serialize tree ke dalam format JSON untuk diterima frontend,
     // termasuk informasi tentang setiap node seperti id, tag, parent, children, depth, dan atribut
     // Struktur ini memungkinkan frontend untuk merekonstruksi kembali pohon DOM dan menampilkan informasi yang relevan
     let nodes = tree
