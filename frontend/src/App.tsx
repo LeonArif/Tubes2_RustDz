@@ -3,6 +3,7 @@ import { fetchTraversalData } from "./api";
 import type { TraversalResponse } from "./types";
 import ControlPanel from "./components/ControlPanel";
 import "./App.css";
+import TreeVisualizer from "./visualizer";
 
 // tipe untuk menyimpan riwayat traversal yang berhasil
 type TraversalHistoryItem = {
@@ -117,7 +118,7 @@ export default function App() {
           )}
         </aside>
 
-        <main className="panel panel-results">
+        <main className="panel panel-results" style={{height: "725px"}}>
           <div className="status-area">
             {isLoading ? (
               <div className="status status-loading">
@@ -127,12 +128,11 @@ export default function App() {
                 <div className="status-subheading">Mohon ditunggu...</div>
               </div>
             ) : result ? (
-              <div className="status status-success">
-                <div className="status-heading">Data berhasil didapatkan</div>
-                <div className="status-subheading">
-                  (visualisasi tree)
-                </div>
-              </div>
+              <TreeVisualizer
+                treeData={result.tree_data}
+                traversalPath={result.traversal_path}
+                matchNodeIds={result.matched_nodes.map((n) => n.id)}
+              />
             ) : (
               <div className="status status-idle">
                 <div className="status-heading">Belum ada hasil</div>
@@ -143,7 +143,7 @@ export default function App() {
             )}
           </div>
 
-          <section className="history-card">
+          <section className="history-card" style={{maxHeight: "300px", overflowY: "auto"}}>
             <div className="history-head">
               <h2 className="history-title">Riwayat Request</h2>
               <span className="history-note">Maks. 5 terakhir</span>
