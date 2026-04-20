@@ -104,12 +104,12 @@ async fn traverse(Json(payload): Json<TraversalRequest>) -> Result<impl IntoResp
     let (traversal_order, elapsed_ms) = match method.as_str() {
         "BFS" => {
             let query = modules::bfs::SearchQuery::Selector(selector_query.clone());
-            let result = modules::bfs::bfs(&tree, &query);
+            let result = modules::bfs::bfs_concurrent(&tree, &query);
             (result.traversal_order, result.metrics.elapsed_ms)
         }
         "DFS" => {
             let query = modules::dfs::SearchQuery::Selector(selector_query.clone());
-            let result = modules::dfs::dfs(&tree, &query);
+            let result = modules::dfs::dfs_concurrent(&tree, &query);
             (result.traversal_order, result.metrics.elapsed_ms)
         }
         _ => {
