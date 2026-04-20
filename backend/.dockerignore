@@ -1,11 +1,8 @@
 target
 .git
 .gitignore
+.github
 README.md
 doc
 .env
-.env.*target
-.git
-.github
-doc
-.env
+.env.*

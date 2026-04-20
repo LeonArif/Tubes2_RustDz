@@ -1,8 +1,7 @@
 import axios from 'axios';
 import type { TraversalResponse } from "./types";
 
-// port server Axum
-const BASE_URL = 'http://localhost:3000'; 
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 // endpoint traversal di backend
 const TRAVERSAL_ENDPOINT = '/api/traverse';
 
