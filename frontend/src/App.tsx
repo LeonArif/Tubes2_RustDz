@@ -143,7 +143,7 @@ export default function App() {
             )}
           </div>
 
-          <section className="history-card" style={{maxHeight: "300px", overflowY: "auto"}}>
+          <section className="history-card" style={{maxHeight: "144px", overflowY: "auto"}}>
             <div className="history-head">
               <h2 className="history-title">Riwayat Request</h2>
               <span className="history-note">Maks. 5 terakhir</span>
