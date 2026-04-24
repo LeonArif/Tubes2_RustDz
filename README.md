@@ -255,12 +255,9 @@ Frontend dapat di-deploy di Vercel:
 
 ### Backend
 
-Backend saat ini adalah server Rust long-running (Axum bind ke PORT), sehingga lebih cocok di platform container/server seperti:
+Backend dapat di-deploy di [isi platform deploy]:
 
-- Render
-- Railway
-- Fly.io
-- VPS/VM
+- [link backend]
 
 Jika frontend di Vercel dan backend di platform lain, set environment variable berikut pada frontend:
 
