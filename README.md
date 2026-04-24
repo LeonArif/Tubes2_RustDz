@@ -259,12 +259,6 @@ Backend dapat di-deploy di [isi platform deploy]:
 
 - [link backend]
 
-Jika frontend di Vercel dan backend di platform lain, set environment variable berikut pada frontend:
-
-```env
-VITE_API_BASE_URL=https://your-backend-domain.com
-```
-
 ## Troubleshooting
 
 - 404 NOT_FOUND di Vercel:
