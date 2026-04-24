@@ -49,7 +49,7 @@ pub struct TraversalStep {
 #[derive(Debug, Clone)]
 pub struct TraversalMetrics {
     pub visited_nodes: usize,
-    pub elapsed_ms: u128,
+    pub elapsed_us: u128,
     pub max_depth: usize,
 }
 
@@ -135,7 +135,7 @@ pub fn bfs(tree: &Tree, query: &SearchQuery) -> TraversalResult {
         log,
         metrics: TraversalMetrics {
             visited_nodes: traversal_order.len(),
-            elapsed_ms: started_at.elapsed().as_millis(),
+            elapsed_us: started_at.elapsed().as_micros(),
             max_depth: tree.max_depth(),
         },
     }
@@ -256,7 +256,7 @@ pub fn bfs_concurrent(tree: &Tree, query: &SearchQuery) -> TraversalResult {
         log,
         metrics: TraversalMetrics {
             visited_nodes: traversal_order.len(),
-            elapsed_ms: started_at.elapsed().as_millis(),
+            elapsed_us: started_at.elapsed().as_micros(),
             max_depth: tree.max_depth(),
         },
     }

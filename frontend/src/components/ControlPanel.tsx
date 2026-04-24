@@ -6,6 +6,7 @@ interface ControlPanelProps {
     sourceUrl: string,
     selector: string,
     method: "BFS" | "DFS",
+    maxDepth: number | null,
   ) => void;
   isLoading: boolean;
 }
@@ -18,6 +19,7 @@ export default function ControlPanel({
   const [sourceUrl, setSourceUrl] = useState("");
   const [cssSelector, setCssSelector] = useState("");
   const [method, setMethod] = useState<"BFS" | "DFS">("BFS");
+  const [maxDepthInput, setMaxDepthInput] = useState("");
 
   const quickSamples = [
     { label: "Example", url: "https://example.com", selector: "h1" },
@@ -33,6 +35,16 @@ export default function ControlPanel({
       setCssSelector(sample.selector);
     }
   };
+
+  const parsedMaxDepth = (() => {
+    const cleaned = maxDepthInput.trim();
+    if (!cleaned) {
+      return null;
+    }
+
+    const depth = Number.parseInt(cleaned, 10);
+    return Number.isFinite(depth) && depth > 0 ? depth : null;
+  })();
 
   return (
     <div className="control-panel">
@@ -88,9 +100,25 @@ export default function ControlPanel({
         </select>
       </div>
 
+      <div className="field">
+        <label className="field-label">Max Depth Visualizer (opsional)</label>
+        <input
+          type="number"
+          min={1}
+          step={1}
+          placeholder="Kosongkan untuk tampilkan semua"
+          value={maxDepthInput}
+          onChange={(e) => setMaxDepthInput(e.target.value)}
+          className="field-input"
+        />
+        <p className="field-help">
+          Jika diisi, visualizer dibatasi pada depth tertentu dan akan menampilkan hingga paling minimal CSS Selector match dengan node.
+        </p>
+      </div>
+
       {/* 4. tombol Eksekusi */}
       <button
-        onClick={() => onTraverse(sourceUrl, cssSelector, method)}
+        onClick={() => onTraverse(sourceUrl, cssSelector, method, parsedMaxDepth)}
         disabled={isLoading || isFormIncomplete}
         className="execute-button"
       >

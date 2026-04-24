@@ -5,6 +5,7 @@ use axum::{
     routing::{get, post},
 };
 use dotenvy::dotenv;
+use reqwest::header::{ACCEPT, ACCEPT_LANGUAGE, HeaderMap, HeaderValue, USER_AGENT};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::env;
@@ -77,6 +78,28 @@ struct TraversalResponse {
     tree_data: serde_json::Value,
 }
 
+const BFS_CONCURRENT_NODE_THRESHOLD: usize = 4000;
+const DFS_CONCURRENT_NODE_THRESHOLD: usize = 4000;
+const DFS_CONCURRENT_ROOT_CHILDREN_THRESHOLD: usize = 8;
+
+fn should_use_bfs_concurrent(tree: &Tree) -> bool {
+    tree.nodes.len() >= BFS_CONCURRENT_NODE_THRESHOLD
+}
+
+fn should_use_dfs_concurrent(tree: &Tree) -> bool {
+    if tree.nodes.len() < DFS_CONCURRENT_NODE_THRESHOLD {
+        return false;
+    }
+
+    let root_children = tree
+        .find_index_from_id(tree.root)
+        .and_then(|root_idx| tree.nodes.get(root_idx))
+        .map(|node| node.children().len())
+        .unwrap_or(0);
+
+    root_children >= DFS_CONCURRENT_ROOT_CHILDREN_THRESHOLD
+}
+
 // fungsi parsing HTML menjadi Tree menggunakan pendekatan struktur data stack
 async fn traverse(Json(payload): Json<TraversalRequest>) -> Result<impl IntoResponse, ApiError> {
     // HTML bisa dikirim langsung atau diambil dari URL
@@ -101,16 +124,24 @@ async fn traverse(Json(payload): Json<TraversalRequest>) -> Result<impl IntoResp
     // algoritma traversal dipilih berdasarkan input method,
     // eksekusi traversal menghasilkan urutan node yang dikunjungi serta metrik waktu eksekusi,
     // yang kemudian digunakan untuk membangun response yang dikirim kembali ke frontend
-    let (traversal_order, elapsed_ms) = match method.as_str() {
+    let (traversal_order, elapsed_us) = match method.as_str() {
         "BFS" => {
             let query = modules::bfs::SearchQuery::Selector(selector_query.clone());
-            let result = modules::bfs::bfs_concurrent(&tree, &query);
-            (result.traversal_order, result.metrics.elapsed_ms)
+            let result = if should_use_bfs_concurrent(&tree) {
+                modules::bfs::bfs_concurrent(&tree, &query)
+            } else {
+                modules::bfs::bfs(&tree, &query)
+            };
+            (result.traversal_order, result.metrics.elapsed_us)
         }
         "DFS" => {
             let query = modules::dfs::SearchQuery::Selector(selector_query.clone());
-            let result = modules::dfs::dfs_concurrent(&tree, &query);
-            (result.traversal_order, result.metrics.elapsed_ms)
+            let result = if should_use_dfs_concurrent(&tree) {
+                modules::dfs::dfs_concurrent(&tree, &query)
+            } else {
+                modules::dfs::dfs(&tree, &query)
+            };
+            (result.traversal_order, result.metrics.elapsed_us)
         }
         _ => {
             return Err(ApiError::BadRequest(
@@ -132,8 +163,7 @@ async fn traverse(Json(payload): Json<TraversalRequest>) -> Result<impl IntoResp
 
     // execution time dari proses traversal
     let tree_data = build_tree_data(&tree);
-    let execution_time_us_u128 = elapsed_ms.saturating_mul(1000);
-    let execution_time_us = execution_time_us_u128.min(u128::from(u64::MAX)) as u64;
+    let execution_time_us = elapsed_us.min(u128::from(u64::MAX)) as u64;
 
     let response = TraversalResponse {
         execution_time_us,
@@ -160,8 +190,23 @@ async fn resolve_html_source(payload: &TraversalRequest) -> Result<String, ApiEr
             ));
         }
 
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            USER_AGENT,
+            HeaderValue::from_static(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+            ),
+        );
+        headers.insert(
+            ACCEPT,
+            HeaderValue::from_static("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+        );
+        headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"));
+
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
+            .default_headers(headers)
+            .redirect(reqwest::redirect::Policy::limited(10))
             .build()
             .map_err(|_| {
                 ApiError::BadRequest("Failed to initialize URL fetch client".to_string())
@@ -174,9 +219,16 @@ async fn resolve_html_source(payload: &TraversalRequest) -> Result<String, ApiEr
             .map_err(|_| ApiError::BadRequest("Gagal mengambil konten dari URL".to_string()))?;
 
         if !response.status().is_success() {
+            let status = response.status();
+            if status == StatusCode::FORBIDDEN {
+                return Err(ApiError::BadRequest(
+                    "URL merespons 403 Forbidden. Situs target kemungkinan memblokir request otomatis. Coba URL lain, gunakan input html_content langsung, atau gunakan endpoint API resmi situs tersebut.".to_string(),
+                ));
+            }
+
             return Err(ApiError::BadRequest(format!(
                 "URL merespons dengan status {}",
-                response.status()
+                status
             )));
         }
 

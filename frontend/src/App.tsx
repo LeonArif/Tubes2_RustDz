@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { fetchTraversalData } from "./api";
 import type { TraversalResponse } from "./types";
 import ControlPanel from "./components/ControlPanel";
@@ -16,10 +16,21 @@ type TraversalHistoryItem = {
   createdAt: string;
 };
 
+type TreeNodeForPath = {
+  id: string;
+  tag: string;
+  parent: string | null;
+};
+
+type TreeDataForPath = {
+  nodes: TreeNodeForPath[];
+};
+
 export default function App() {
   // state hasil traversal
   const [result, setResult] = useState<TraversalResponse | null>(null);
   const [history, setHistory] = useState<TraversalHistoryItem[]>([]);
+  const [maxDepth, setMaxDepth] = useState<number | null>(null);
 
   // state untuk status proses (loading & error)
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -30,6 +41,7 @@ export default function App() {
     sourceUrl: string,
     selector: string,
     method: "BFS" | "DFS",
+    requestedMaxDepth: number | null,
   ) => {
     // validasi input sebelum memulai proses
     if (!sourceUrl.trim()) {
@@ -52,6 +64,7 @@ export default function App() {
     setIsLoading(true);
     setError(null); // reset error setiap mulai pencarian baru
     setResult(null); // reset hasil lama
+    setMaxDepth(requestedMaxDepth);
 
     try {
       // memanggil API
@@ -84,6 +97,34 @@ export default function App() {
     }
   };
 
+  const finalPath = useMemo(() => {
+    if (!result) {
+      return [] as string[];
+    }
+
+    const tree = result.tree_data as unknown as TreeDataForPath;
+    if (!tree?.nodes?.length) {
+      return [] as string[];
+    }
+
+    const nodeById = new Map(tree.nodes.map((node) => [node.id, node]));
+    const pathNodeIds = result.traversal_path;
+    if (pathNodeIds.length === 0) {
+      return [] as string[];
+    }
+
+    const finalNodeId = pathNodeIds[pathNodeIds.length - 1];
+    const tagPath: string[] = [];
+    let currentNode = nodeById.get(finalNodeId);
+
+    while (currentNode) {
+      tagPath.push(currentNode.tag);
+      currentNode = currentNode.parent ? nodeById.get(currentNode.parent) : undefined;
+    }
+
+    return tagPath.reverse();
+  }, [result]);
+
   return (
     <div className="app-shell">
       <div className="app-grid">
@@ -103,6 +144,17 @@ export default function App() {
             isLoading={isLoading}
           />
 
+          {result && (
+            <div className="path-card">
+              <h3 className="summary-title">Jalur Akhir Traversal</h3>
+              {finalPath.length > 0 ? (
+                <p className="path-value">{finalPath.join(" -> ")}</p>
+              ) : (
+                <p className="path-value">Jalur tidak tersedia.</p>
+              )}
+            </div>
+          )}
+
           {error && <div className="alert alert-error">{error}</div>}
 
           {result && (
@@ -118,7 +170,7 @@ export default function App() {
           )}
         </aside>
 
-        <main className="panel panel-results" style={{height: "725px"}}>
+        <main className="panel panel-results">
           <div className="status-area">
             {isLoading ? (
               <div className="status status-loading">
@@ -132,6 +184,7 @@ export default function App() {
                 treeData={result.tree_data}
                 traversalPath={result.traversal_path}
                 matchNodeIds={result.matched_nodes.map((n) => n.id)}
+                maxDepth={maxDepth}
               />
             ) : (
               <div className="status status-idle">
