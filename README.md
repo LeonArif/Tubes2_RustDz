@@ -255,9 +255,9 @@ Frontend dapat di-deploy di Vercel:
 
 ### Backend
 
-Backend dapat di-deploy di [isi platform deploy]:
+Backend dapat di-deploy di Render:
 
-- [link backend]
+- (https://tubes2-rustdz-backend.onrender.com)
 
 ## Troubleshooting
 
